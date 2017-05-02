@@ -2,10 +2,10 @@ project(odm_slam)
 cmake_minimum_required(VERSION 2.8)
 
 # Set opencv dir to the input spedified with option -DOPENCV_DIR="path"
-set(OPENCV_DIR "OPENCV_DIR-NOTFOUND" CACHE "OPENCV_DIR" "Path to the opencv installation directory")
+#set(OPENCV_DIR "OPENCV_DIR-NOTFOUND" CACHE "OPENCV_DIR" "Path to the opencv installation directory")
 
 # Add compiler options.
-add_definitions(-Wall -Wextra)
+add_definitions(-Wall)
 
 # Find pcl at the location specified by PCL_DIR
 find_package(PCL 1.7 HINTS "${PCL_DIR}/share/pcl-1.7" REQUIRED)
