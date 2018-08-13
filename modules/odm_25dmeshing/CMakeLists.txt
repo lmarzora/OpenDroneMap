@@ -30,7 +30,7 @@ if ( CGAL_FOUND )
   endif()
 
   # Add compiler options.
-  add_definitions(-Wall -Wextra -std=c++11)
+  add_definitions(-Wall -std=c++11)
 	
   # Add source directory
   aux_source_directory("./src" SRC_LIST)

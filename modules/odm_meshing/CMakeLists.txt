@@ -5,10 +5,10 @@ cmake_minimum_required(VERSION 2.8)
 set(PCL_DIR "PCL_DIR-NOTFOUND" CACHE "PCL_DIR" "Path to the pcl installation directory")
 
 # Add compiler options.
-add_definitions(-Wall -Wextra)
+add_definitions(-Wall)
 
 # Find pcl at the location specified by PCL_DIR
-find_package(PCL 1.8 HINTS "${PCL_DIR}/share/pcl-1.8")
+find_package(PCL 1.8 HINTS "${PCL_DIR}/share/pcl")
 
 # Add the PCL and Eigen include dirs. 
 # Necessary since the PCL_INCLUDE_DIR variable set by find_package is broken.)

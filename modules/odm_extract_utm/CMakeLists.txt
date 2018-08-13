@@ -2,15 +2,21 @@ project(odm_extract_utm)
 cmake_minimum_required(VERSION 2.8)
 
 set(PROJ4_INCLUDE_DIR "/usr/include/" CACHE "PROJ4_INCLUDE_DIR" "Path to the proj4 inlcude directory")
+set(EXIV2_INCLUDE_DIR "EXIV_INCLUDE_DIR-NOTFOUND" CACHE "EXIV2_INCLUDE_DIR" "Path to the exiv2 inlcude directory")
+
 
 find_library(PROJ4_LIBRARY "libproj.so" PATHS "/usr/lib" "/usr/lib/x86_64-linux-gnu")
 find_library(EXIV2_LIBRARY "libexiv2.so" PATHS "/usr/lib" "/usr/lib/x86_64-linux-gnu")
 
 # Add compiler options.
-add_definitions(-Wall -Wextra)
+add_definitions(-Wall)
 
 # Add source directory
 aux_source_directory("./src" SRC_LIST)
+
+# Add include dir
+
+include_directories(${EXIV2_INCLUDE_DIR})
 
 # Add exectuteable
 add_executable(${PROJECT_NAME} ${SRC_LIST})

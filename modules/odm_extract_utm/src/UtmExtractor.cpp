@@ -173,18 +173,14 @@ void UtmExtractor::extractUtm()
     // Read image and load metadata
     Exiv2::Image::AutoPtr image = Exiv2::ImageFactory::open(imagesPath_ + "/" + imageFilename);
     if (image.get() == 0) {
-      std::string error(imageFilename);
-      error += ": Image cannot be read";
-      throw Exiv2::Error(1, error);
+      throw Exiv2::Error(Exiv2::kerInputDataReadFailed);
     }
     else {
       image->readMetadata();
 
       Exiv2::ExifData &exifData = image->exifData();
       if (exifData.empty()) {
-        std::string error(imageFilename);
-        error += ": No Exif data found in the file";
-        throw Exiv2::Error(1, error);
+       throw Exiv2::Error(Exiv2::kerInputDataReadFailed);
       }
 
       // Parse exif data for positional data

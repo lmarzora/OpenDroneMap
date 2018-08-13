@@ -8,10 +8,10 @@ set(PCL_DIR "PCL_DIR-NOTFOUND" CACHE "PCL_DIR" "Path to the pcl installation dir
 set(OPENCV_DIR "OPENCV_DIR-NOTFOUND" CACHE "OPENCV_DIR" "Path to the opencv installation directory")
 
 # Add compiler options.
-add_definitions(-Wall -Wextra)
+add_definitions(-Wall)
 
 # Find pcl at the location specified by PCL_DIR
-find_package(PCL 1.8 HINTS "${PCL_DIR}/share/pcl-1.8" REQUIRED)
+find_package(PCL 1.8 HINTS "${PCL_DIR}/share/pcl" REQUIRED)
 
 # Find OpenCV at the default location
 find_package(OpenCV HINTS "${OPENCV_DIR}" REQUIRED)
