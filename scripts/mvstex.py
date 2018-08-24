@@ -1,4 +1,4 @@
-import ecto, os
+import ecto, os, shutil
 
 from opendm import log
 from opendm import io
@@ -24,8 +24,6 @@ class ODMMvsTexCell(ecto.Cell):
         inputs.declare("reconstruction", "Clusters output. list of ODMReconstructions", [])
         outputs.declare("reconstruction", "Clusters output. list of ODMReconstructions", [])
 
-    
-
     def process(self, inputs, outputs):
 
         # Benchmarking
@@ -34,8 +32,9 @@ class ODMMvsTexCell(ecto.Cell):
         log.ODM_INFO('Running MVS Texturing Cell')
 
         # get inputs
-        args = self.inputs.args
-        tree = self.inputs.tree
+        args = inputs.args
+        tree = inputs.tree
+        reconstruction = inputs.reconstruction
 
         # define paths and create working directories
         system.mkdir_p(tree.odm_texturing)
@@ -50,13 +49,24 @@ class ODMMvsTexCell(ecto.Cell):
 
         runs = [{
             'out_dir': tree.odm_texturing,
-            'model': tree.odm_mesh
+            'model': tree.odm_mesh,
+            'force_skip_vis_test': False
         }]
+
+        if args.fast_orthophoto:
+            runs = []
 
         if args.use_25dmesh:
             runs += [{
                     'out_dir': tree.odm_25dtexturing,
-                    'model': tree.odm_25dmesh
+                    'model': tree.odm_25dmesh,
+
+                    # We always skip the visibility test when using the 2.5D mesh
+                    # because many faces end up being narrow, and almost perpendicular 
+                    # to the ground plane. The visibility test improperly classifies
+                    # them as "not seen" since the test is done on a single triangle vertex,
+                    # and while one vertex might be occluded, the other two might not.
+                    'force_skip_vis_test': True 
                 }]
 
         for r in runs:
@@ -65,8 +75,7 @@ class ODMMvsTexCell(ecto.Cell):
             if not io.file_exists(odm_textured_model_obj) or rerun_cell:
                 log.ODM_DEBUG('Writing MVS Textured file in: %s'
                               % odm_textured_model_obj)
-                
-                
+
                 # Format arguments to fit Mvs-Texturing app
                 skipGeometricVisibilityTest = ""
                 skipGlobalSeamLeveling = ""
@@ -74,7 +83,7 @@ class ODMMvsTexCell(ecto.Cell):
                 skipHoleFilling = ""
                 keepUnseenFaces = ""
                 
-                if (self.params.skip_vis_test):
+                if (self.params.skip_vis_test or r['force_skip_vis_test']):
                     skipGeometricVisibilityTest = "--skip_geometric_visibility_test"
                 if (self.params.skip_glob_seam_leveling):
                     skipGlobalSeamLeveling = "--skip_global_seam_leveling"
@@ -113,6 +122,12 @@ class ODMMvsTexCell(ecto.Cell):
                     pmvs2nvmcams.run('{pmvs_folder}'.format(**kwargs),
                                      '{nvm_file}'.format(**kwargs))
 
+                # Make sure tmp directory is empty
+                mvs_tmp_dir = os.path.join(r['out_dir'], 'tmp')
+                if io.dir_exists(mvs_tmp_dir):
+                    log.ODM_INFO("Removing old tmp directory {}".format(mvs_tmp_dir))
+                    shutil.rmtree(mvs_tmp_dir)
+
                 # run texturing binary
                 system.run('{bin} {nvm_file} {model} {out_dir} '
                            '-d {dataTerm} -o {outlierRemovalType} '
@@ -126,8 +141,10 @@ class ODMMvsTexCell(ecto.Cell):
                 log.ODM_WARNING('Found a valid ODM Texture file in: %s'
                                 % odm_textured_model_obj)
 
+        outputs.reconstruction = reconstruction
+
         if args.time:
             system.benchmark(start_time, tree.benchmarking, 'Texturing')
 
         log.ODM_INFO('Running ODM Texturing Cell - Finished')
-        return ecto.OK if args.end_with != 'odm_texturing' else ecto.QUIT
+        return ecto.OK if args.end_with != 'mvs_texturing' else ecto.QUIT

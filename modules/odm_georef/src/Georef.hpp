@@ -8,6 +8,7 @@
 // PCL
 #include <pcl/common/eigen.h>
 #include <pcl/common/common.h>
+#include <pcl/io/ply_io.h>
 // Modified PCL
 #include "modifiedPclFunctions.hpp"
 
@@ -46,10 +47,11 @@ struct GeorefGCP
 
     size_t cameraIndex_;    /**< The index to the corresponding camera for the image. **/
 
-    int pixelX_;            /**< The pixels x-position for the GCP in the corresponding image **/
-    int pixelY_;            /**< The pixels y-position for the GCP in the corresponding image **/
+    double pixelX_;            /**< The pixels x-position for the GCP in the corresponding image **/
+    double pixelY_;            /**< The pixels y-position for the GCP in the corresponding image **/
 
     std::string image_;     /**< The corresponding image for the GCP **/
+    std::string idgcp_;     /**< The corresponding identification for the GCP **/
 
     GeorefGCP();
     ~GeorefGCP();
@@ -95,6 +97,11 @@ struct GeorefCamera
      * \brief getReferencedPos     Get the georeferenced position of the camera.
      */
     Vec3 getReferencedPos();
+
+    /*!
+     * \brief isValid     Whether this camera is valid based on its parameters.
+     */
+    bool isValid();
     
     double focalLength_;            /**< The focal length of the camera. */
     double k1_;                     /**< The k1 lens distortion parameter. **/
@@ -230,7 +237,9 @@ private:
     /*!
       * \brief printFinalTransform      Prints a file containing the final transform, next to the output file.
       **/
-    void printFinalTransform(Mat4 transform);
+    template <typename Scalar>
+    void printFinalTransform(const Eigen::Transform<Scalar, 3, Eigen::Affine> &transform);
+
     
     /*!
       * \brief Loads a model from an .obj file (replacement for the pcl obj loader).
@@ -259,6 +268,7 @@ private:
     std::string     inputCoordFilename_;        /**< The path to the cameras exif gps positions file. **/
     std::string     outputCoordFilename_;       /**< The path to the cameras georeferenced gps positions file. **/
     std::string     gcpFilename_;               /**< The path to the GCP file **/
+    std::string     transformFilename_;         /**< The path to the input transform file **/
     std::string     imagesListPath_;            /**< Path to the image list. **/
     std::string     imagesLocation_;            /**< The folder containing the images in the image list. **/
     std::string     inputObjFilename_;          /**< The path to the input mesh obj file. **/
@@ -271,7 +281,8 @@ private:
     bool            exportCoordinateFile_;
     bool            exportGeorefSystem_;
     bool            useGCP_;                    /**< Check if GCP-file is present and use this to georeference the model. **/
-    double          bundleResizedTo_;           /**< The size used in the previous steps to calculate the camera focal_length. */
+    bool            useTransform_;
+    // double          bundleResizedTo_;           /**< The size used in the previous steps to calculate the camera focal_length. */
 
     std::vector<GeorefCamera> cameras_;         /**< A vector of all cameras. **/
     std::vector<GeorefGCP> gcps_;               /**< A vector of all GCPs. **/
@@ -282,6 +293,12 @@ private:
     bool            multiMaterial_;     /**< True if the mesh has multiple materials. **/
 
     std::vector<pcl::MTLReader> companions_; /**< Materials (used by loadOBJFile). **/
+    void performFinalTransform(Mat4 &transMat, pcl::TextureMesh &mesh, pcl::PointCloud<pcl::PointXYZ>::Ptr &meshCloud, bool addUTM);
+    
+    template <typename Scalar>
+    void transformPointCloud(const char *inputFile, const Eigen::Transform<Scalar, 3, Eigen::Affine> &transform, const char *outputFile);
+    
+    void createGeoreferencedModelFromSFM();
 };
 
 /*!

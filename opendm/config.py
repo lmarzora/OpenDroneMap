@@ -2,13 +2,12 @@ import argparse
 from opendm import context
 from opendm import io
 from opendm import log
-from yaml import safe_load
 from appsettings import SettingsParser
 
 import sys
 
 # parse arguments
-processopts = ['resize', 'opensfm', 'slam', 'cmvs', 'pmvs',
+processopts = ['dataset', 'opensfm', 'slam', 'cmvs', 'pmvs',
                'odm_meshing', 'odm_25dmeshing', 'mvs_texturing', 'odm_georeferencing',
                'odm_dem', 'odm_orthophoto']
 
@@ -98,6 +97,10 @@ def config():
                         help=('Override the focal length information for the '
                               'images'))
 
+    parser.add_argument('--proj',
+                        metavar='<PROJ4 string>',
+                        help='Projection used to transform the model into geographic coordinates')
+
     parser.add_argument('--force-ccd',
                         metavar='<positive float>',
                         type=float,
@@ -105,7 +108,7 @@ def config():
 
     parser.add_argument('--min-num-features',
                         metavar='<integer>',
-                        default=4000,
+                        default=8000,
                         type=int,
                         help=('Minimum number of features to extract per image. '
                               'More features leads to better results but slower '
@@ -143,7 +146,47 @@ def config():
                         type=int,
                         help=('The maximum number of processes to use in dense '
                               'reconstruction. Default: %(default)s'))
-    
+
+    parser.add_argument('--opensfm-depthmap-resolution',
+                        metavar='<positive float>',
+                        type=float,
+                        default=640,
+                        help=('Resolution of the depthmaps. Higher values take longer to compute '
+                              'but produce denser point clouds. '
+                              'Default: %(default)s'))
+
+    parser.add_argument('--opensfm-depthmap-min-consistent-views',
+                      metavar='<integer: 2 <= x <= 9>',
+                      type=int,
+                      default=3,
+                      help=('Minimum number of views that should reconstruct a point for it to be valid. Use lower values '
+                            'if your images have less overlap. Lower values result in denser point clouds '
+                            'but with more noise. '
+                            'Default: %(default)s'))
+
+    parser.add_argument('--opensfm-depthmap-method',
+                      metavar='<string>',
+                      default='PATCH_MATCH',
+                      choices=['PATCH_MATCH', 'BRUTE_FORCE', 'PATCH_MATCH_SAMPLE'],
+                      help=('Raw depthmap computation algorithm. '
+                            'PATCH_MATCH and PATCH_MATCH_SAMPLE are faster, but might miss some valid points. '
+                            'BRUTE_FORCE takes longer but produces denser reconstructions. '
+                            'Default: %(default)s'))
+
+    parser.add_argument('--opensfm-depthmap-min-patch-sd',
+                      metavar='<positive float>',
+                      type=float,
+                      default=1,
+                      help=('When using PATCH_MATCH or PATCH_MATCH_SAMPLE, controls the standard deviation threshold to include patches. '
+                            'Patches with lower standard deviation are ignored. '
+                            'Default: %(default)s'))
+
+    parser.add_argument('--use-hybrid-bundle-adjustment',
+                        action='store_true',
+                        default=False,
+                        help='Run local bundle adjustment for every image added to the reconstruction and a global '
+                             'adjustment every 100 images. Speeds up reconstruction for very large datasets.')
+
     parser.add_argument('--use-25dmesh',
                     action='store_true',
                     default=False,
@@ -243,22 +286,58 @@ def config():
                               'times slightly but helps reduce memory usage. '
                               'Default: %(default)s'))
     
-    parser.add_argument('--mesh-remove-outliers',
-                        metavar='<percent>',
-                        default=2,
-                        type=float,
-                        help=('Percentage of outliers to remove from the point set. Set to 0 to disable. '
+    parser.add_argument('--mesh-neighbors',
+                        metavar='<positive integer>',
+                        default=24,
+                        type=int,
+                        help=('Number of neighbors to select when estimating the surface model used to compute the mesh and for statistical outlier removal. Higher values lead to smoother meshes but take longer to process. '
                               'Applies to 2.5D mesh only. '
                               'Default: %(default)s'))
 
-    parser.add_argument('--mesh-wlop-iterations',
-                        metavar='<positive integer>',
-                        default=35,
-                        type=int,
-                        help=('Iterations of the Weighted Locally Optimal Projection (WLOP) simplification algorithm. '
-                              'Higher values take longer but produce a smoother mesh. '
+    parser.add_argument('--mesh-resolution',
+                        metavar='<positive float>',
+                        default=0,
+                        type=float,
+                        help=('Size of the interpolated surface model used for deriving the 2.5D mesh, expressed in pixels per meter. '
+                              'Higher values work better for complex or urban terrains. '
+                              'Lower values work better on flat areas. '
+                              'Resolution has no effect on the number of vertices, but high values can severely impact runtime speed and memory usage. '
+                              'When set to zero, the program automatically attempts to find a good value based on the point cloud extent and target vertex count. '
                               'Applies to 2.5D mesh only. '
                               'Default: %(default)s'))
+
+    parser.add_argument('--fast-orthophoto',
+                action='store_true',
+                default=False,
+                help='Skips dense reconstruction and 3D model generation. '
+                'It generates an orthophoto directly from the sparse reconstruction. '
+                'If you just need an orthophoto and do not need a full 3D model, turn on this option. '
+                'Experimental.')
+
+    parser.add_argument('--crop',
+                    metavar='<positive float>',
+                    default=3,
+                    type=float,
+                    help=('Automatically crop image outputs by creating a smooth buffer '
+                          'around the dataset boundaries, shrinked by N meters. '
+                          'Use 0 to disable cropping. '
+                          'Default: %(default)s'))
+
+    parser.add_argument('--pc-classify',
+            metavar='<string>',
+            default='none',
+            choices=['none', 'smrf', 'pmf'],
+            help='Classify the .LAS point cloud output using either '
+            'a Simple Morphological Filter or a Progressive Morphological Filter. '
+            'If --dtm is set this parameter defaults to smrf. '
+            'You can control the behavior of both smrf and pmf by tweaking the --dem-* parameters. '
+            'Default: '
+            '%(default)s')
+
+    parser.add_argument('--pc-csv',
+                        action='store_true',
+                        default=False,
+                        help='Export the georeferenced point cloud in CSV format. Default:  %(default)s')
 
     parser.add_argument('--texturing-data-term',
                         metavar='<string>',
@@ -271,8 +350,8 @@ def config():
                         metavar='<string>',
                         default='gauss_clamping',
                         choices=['none', 'gauss_clamping', 'gauss_damping'],
-                        help=('Type of photometric outlier removal method: ' 
-                              '[none, gauss_damping, gauss_clamping]. Default: '  
+                        help=('Type of photometric outlier removal method: '
+                              '[none, gauss_damping, gauss_clamping]. Default: '
                               '%(default)s'))
 
     parser.add_argument('--texturing-skip-visibility-test',
@@ -301,7 +380,7 @@ def config():
     parser.add_argument('--texturing-keep-unseen-faces',
                         action='store_true',
                         default=False,
-                        help=('Keep faces in the mesh that are not seen in any camera. ' 
+                        help=('Keep faces in the mesh that are not seen in any camera. '
                               'Default:  %(default)s'))
 
     parser.add_argument('--texturing-tone-mapping',
@@ -332,7 +411,7 @@ def config():
                         default=False,
                         help='Use this tag to build a DTM (Digital Terrain Model, ground only) using a progressive '
                              'morphological filter. Check the --dem* parameters for fine tuning.')
-    
+
     parser.add_argument('--dsm',
                         action='store_true',
                         default=False,
@@ -484,5 +563,18 @@ def config():
                       'or use `--project-path <path>`. Run `python '
                       'run.py --help` for more information. ')
         sys.exit(1)
+
+    if args.fast_orthophoto:
+      log.ODM_INFO('Fast orthophoto is turned on, automatically setting --use-25dmesh')
+      args.use_25dmesh = True
+
+      # Cannot use pmvs
+      if args.use_pmvs:
+        log.ODM_INFO('Fast orthophoto is turned on, cannot use pmvs (removing --use-pmvs)')
+        args.use_pmvs = False
+
+    if args.dtm and args.pc_classify == 'none':
+      log.ODM_INFO("DTM is turned on, automatically turning on point cloud classification")
+      args.pc_classify = "smrf"
 
     return args

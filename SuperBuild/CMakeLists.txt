@@ -2,6 +2,11 @@ cmake_minimum_required(VERSION 3.1)
 
 project(ODM-SuperBuild)
 
+if (NOT CMAKE_BUILD_TYPE)
+    message(STATUS "No build type selected, default to Release")
+    set(CMAKE_BUILD_TYPE "Release")
+endif()
+
 # Setup SuperBuild root location
 set(SB_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -91,12 +96,15 @@ SETUP_EXTERNAL_PROJECT(Ceres ${ODM_Ceres_Version} ${ODM_BUILD_Ceres})
 
 
 # ---------------------------------------------------------------------------------------------
-# CGAL
-#
-set(ODM_CGAL_Version 4.9)
-option(ODM_BUILD_CGAL "Force to build CGAL library" OFF)
+# VTK7
+# We need to build VTK from sources because Debian packages
+# are built with DVTK_SMP_IMPLEMENTATION_TYPE set to 
+# "Sequential" which means no multithread support.
 
-SETUP_EXTERNAL_PROJECT(CGAL ${ODM_CGAL_Version} ${ODM_BUILD_CGAL})
+set(ODM_VTK7_Version 7.1.1)
+option(ODM_BUILD_VTK7 "Force to build VTK7 library" OFF)
+
+SETUP_EXTERNAL_PROJECT(VTK7 ${ODM_VTK7_Version} ${ODM_BUILD_VTK7})
 
 # ---------------------------------------------------------------------------------------------
 # Hexer
@@ -116,9 +124,9 @@ set(custom_libs OpenGV
 				CMVS
 				Catkin
 				Ecto
+				LASzip
 				PDAL
 				MvsTexturing
-				Lidar2dems
 )
 
 # Dependencies of the SLAM module

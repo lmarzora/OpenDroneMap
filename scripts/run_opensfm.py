@@ -15,11 +15,12 @@ class ODMOpenSfMCell(ecto.Cell):
         params.declare("matching_gps_neighbors", "The application arguments.", 8)
         params.declare("matching_gps_distance", "The application arguments.", 0)
         params.declare("fixed_camera_params", "Optimize internal camera parameters", True)
+        params.declare("hybrid_bundle_adjustment", "Use local + global bundle adjustment", False)
 
     def declare_io(self, params, inputs, outputs):
         inputs.declare("tree", "Struct with paths", [])
         inputs.declare("args", "The application arguments.", {})
-        inputs.declare("photos", "list of ODMPhoto's", [])
+        inputs.declare("reconstruction", "ODMReconstruction", [])
         outputs.declare("reconstruction", "list of ODMReconstructions", [])
 
     def process(self, inputs, outputs):
@@ -30,9 +31,10 @@ class ODMOpenSfMCell(ecto.Cell):
         log.ODM_INFO('Running ODM OpenSfM Cell')
 
         # get inputs
-        tree = self.inputs.tree
-        args = self.inputs.args
-        photos = self.inputs.photos
+        tree = inputs.tree
+        args = inputs.args
+        reconstruction = inputs.reconstruction
+        photos = reconstruction.photos
 
         if not photos:
             log.ODM_ERROR('Not enough photos in photos array to start OpenSfM')
@@ -51,6 +53,8 @@ class ODMOpenSfMCell(ecto.Cell):
 
         if not args.use_pmvs:
             output_file = tree.opensfm_model
+            if args.fast_orthophoto:
+                output_file = io.join_paths(tree.opensfm, 'reconstruction.ply')
         else:
             output_file = tree.opensfm_reconstruction
 
@@ -72,6 +76,10 @@ class ODMOpenSfMCell(ecto.Cell):
                 "feature_min_frames: %s" % self.params.feature_min_frames,
                 "processes: %s" % self.params.processes,
                 "matching_gps_neighbors: %s" % self.params.matching_gps_neighbors,
+                "depthmap_method: %s" % args.opensfm_depthmap_method,
+                "depthmap_resolution: %s" % args.opensfm_depthmap_resolution,
+                "depthmap_min_patch_sd: %s" % args.opensfm_depthmap_min_patch_sd,
+                "depthmap_min_consistent_views: %s" % args.opensfm_depthmap_min_consistent_views,
                 "optimize_camera_parameters: %s" % ('no' if self.params.fixed_camera_params else 'yes')
             ]
 
@@ -80,10 +88,21 @@ class ODMOpenSfMCell(ecto.Cell):
                 config.append("use_altitude_tag: True")
                 config.append("align_method: naive")
 
+            if args.use_hybrid_bundle_adjustment:
+                log.ODM_DEBUG("Enabling hybrid bundle adjustment")
+                config.append("bundle_interval: 100")          # Bundle after adding 'bundle_interval' cameras
+                config.append("bundle_new_points_ratio: 1.2")  # Bundle when (new points) / (bundled points) > bundle_new_points_ratio
+                config.append("local_bundle_radius: 1")        # Max image graph distance for images to be included in local bundle adjustment
+
             if args.matcher_distance > 0:
                 config.append("matching_gps_distance: %s" % self.params.matching_gps_distance)
 
+            if tree.odm_georeferencing_gcp:
+                config.append("bundle_use_gcp: yes")
+                io.copy(tree.odm_georeferencing_gcp, tree.opensfm)
+
             # write config file
+            log.ODM_DEBUG(config)
             config_filename = io.join_paths(tree.opensfm, 'config.yaml')
             with open(config_filename, 'w') as fout:
                 fout.write("\n".join(config))
@@ -117,13 +136,6 @@ class ODMOpenSfMCell(ecto.Cell):
                 log.ODM_WARNING('Found a valid OpenSfM reconstruction file in: %s' %
                                 tree.opensfm_reconstruction)
 
-            if not io.file_exists(tree.opensfm_reconstruction_meshed) or rerun_cell:
-                system.run('PYTHONPATH=%s %s/bin/opensfm mesh %s' %
-                           (context.pyopencv_path, context.opensfm_path, tree.opensfm))
-            else:
-                log.ODM_WARNING('Found a valid OpenSfM meshed reconstruction file in: %s' %
-                                tree.opensfm_reconstruction_meshed)
-
             if not args.use_pmvs:
                 if not io.file_exists(tree.opensfm_reconstruction_nvm) or rerun_cell:
                     system.run('PYTHONPATH=%s %s/bin/opensfm export_visualsfm %s' %
@@ -134,8 +146,16 @@ class ODMOpenSfMCell(ecto.Cell):
 
                 system.run('PYTHONPATH=%s %s/bin/opensfm undistort %s' %
                            (context.pyopencv_path, context.opensfm_path, tree.opensfm))
-                system.run('PYTHONPATH=%s %s/bin/opensfm compute_depthmaps %s' %
+                
+                # Skip dense reconstruction if necessary and export
+                # sparse reconstruction instead
+                if args.fast_orthophoto:
+                    system.run('PYTHONPATH=%s %s/bin/opensfm export_ply --no-cameras %s' %
                            (context.pyopencv_path, context.opensfm_path, tree.opensfm))
+                else:
+                    system.run('PYTHONPATH=%s %s/bin/opensfm compute_depthmaps %s' %
+                           (context.pyopencv_path, context.opensfm_path, tree.opensfm))
+
         else:
             log.ODM_WARNING('Found a valid OpenSfM reconstruction file in: %s' %
                             tree.opensfm_reconstruction)
@@ -157,6 +177,12 @@ class ODMOpenSfMCell(ecto.Cell):
                            (context.pyopencv_path, context.opensfm_path, tree.opensfm, tree.pmvs))
             else:
                 log.ODM_WARNING('Found a valid CMVS file in: %s' % tree.pmvs_visdat)
+
+        if reconstruction.georef:
+            system.run('PYTHONPATH=%s %s/bin/opensfm export_geocoords %s --transformation --proj \'%s\'' %
+                       (context.pyopencv_path, context.opensfm_path, tree.opensfm, reconstruction.georef.projection.srs))
+
+        outputs.reconstruction = reconstruction
 
         if args.time:
             system.benchmark(start_time, tree.benchmarking, 'OpenSfM')
