@@ -1421,13 +1421,14 @@ void Georef::transformPointCloud(const char *inputFile, const Eigen::Transform<S
         // precision
         std::ofstream f (outputFile);
         f << "ply" << std::endl;
-
+		/*
         if (IS_BIG_ENDIAN){
           f << "format binary_big_endian 1.0" << std::endl;
         }else{
           f << "format binary_little_endian 1.0" << std::endl;
         }
-
+		*/
+		f << "format ascii 1.0" << std::endl;
         const char *type = "double";
         if (sizeof(Scalar) == sizeof(float)){
             type = "float";
@@ -1451,8 +1452,9 @@ void Georef::transformPointCloud(const char *inputFile, const Eigen::Transform<S
             uint8_t b;
         } p;
         size_t psize = sizeof(Scalar) * 3 + sizeof(uint8_t) * 3;
-
-        // Transform
+		
+        
+		// Transform
         for (unsigned int i = 0; i < pointCloud.size(); i++){
             Scalar x = static_cast<Scalar>(pointCloud[i].x);
             Scalar y = static_cast<Scalar>(pointCloud[i].y);
@@ -1465,7 +1467,10 @@ void Georef::transformPointCloud(const char *inputFile, const Eigen::Transform<S
             p.y = static_cast<Scalar> (transform (1, 0) * x + transform (1, 1) * y + transform (1, 2) * z + transform (1, 3));
             p.z = static_cast<Scalar> (transform (2, 0) * x + transform (2, 1) * y + transform (2, 2) * z + transform (2, 3));
 
-            f.write(reinterpret_cast<char*>(&p), psize);
+			f.precision(10);
+			f << std::fixed << p.x << " " << std::fixed << p.y << " " << std::fixed << p.z << " " << 0 << " " << 0 << " " << 0 << std::endl;
+
+			//f.write(reinterpret_cast<char*>(&p), psize);
 
             // TODO: normals can be computed using the inverse transpose
             // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
